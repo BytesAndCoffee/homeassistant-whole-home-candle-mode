@@ -2,10 +2,11 @@
 
 ## What this is
 
-`whole_home_candle_mode.yaml` is a Home Assistant package that creates two virtual candle-mode switches:
+`whole_home_candle_mode.yaml` is a Home Assistant package that creates three virtual candle-mode switches:
 
 - `switch.candle_mode_single`
 - `switch.candle_mode_all` (friendly name: **Whole Home Candle Mode**)
+- `switch.candle_mode_cozy`
 
 The goal is to make lamps behave more like flame, not like a random-number generator.
 
@@ -33,11 +34,15 @@ Bounded random walks look more like:
 
 ### Brightness
 - normal clamp: **60% to 80%**
-- rare flare: **85%**
+- cozy clamp: **10% to 30%**
+- rare bright flare: **85%** in normal mode, reduced in cozy mode
+- rare dim falter: **55%** in normal mode, reduced in cozy mode
 - flare chance: **1 in 10** per update
+- falter chance: **1 in 20** per update
 
 ### Color temperature
-- clamp: **2202K to 2502K**
+- normal clamp: **2202K to 2502K**
+- cozy clamp: **2202K to 2302K**
 
 ### Cadence
 - per-bulb update loop: **100ms to 300ms**
@@ -56,9 +61,11 @@ That matters because synchronized or serialized lamps look fake, laggy, or both.
 ## Safety / behavior rules
 
 - single mode and whole-home mode are mutually exclusive
+- cozy mode is global and changes the active candle envelope live
 - turning off the controlled lamp turns single mode off
 - turning a mode off turns its lamps off
 - each runner waits briefly for its lamp to report `on` before entering the loop
+- each runner tolerates transient command errors so one timeout does not kill the effect
 
 ## Best use case
 

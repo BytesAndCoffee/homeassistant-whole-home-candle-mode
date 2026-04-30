@@ -9,14 +9,18 @@
 # This package creates:
 # - switch.candle_mode_single
 # - switch.candle_mode_all
+# - switch.candle_mode_cozy
 #
 # Behavior:
 # - bounded random walk, not absolute random jumps
-# - brightness clamp: 60% to 80%
-# - 1 in 10 chance of a brief 85% flare
-# - warm color range: 2202K to 2502K
+# - normal brightness clamp: 60% to 80%
+# - cozy brightness clamp: 10% to 30%
+# - normal color range: 2202K to 2502K
+# - cozy color range: 2202K to 2302K
+# - bright flare and dim falter behavior
 # - per-bulb update cadence: 100ms to 300ms
 # - one independent runner per lamp in whole-home mode
+# - per-lamp startup staggering and continue_on_error for resilience
 
 input_boolean:
   candle_mode_single:
@@ -25,6 +29,9 @@ input_boolean:
   candle_mode_all:
     name: Whole Home Candle Mode
     icon: mdi:candelabra
+  candle_mode_cozy:
+    name: Candle Mode Cozy
+    icon: mdi:fireplace
 
 template:
   - switch:
@@ -83,6 +90,19 @@ template:
                 - light.REPLACE_SINGLE_TARGET
                 - light.REPLACE_LAMP_2
                 - light.REPLACE_LAMP_3
+
+      - name: Candle Mode Cozy
+        unique_id: candle_mode_cozy_switch
+        icon: mdi:fireplace
+        state: "{{ is_state('input_boolean.candle_mode_cozy', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.candle_mode_cozy
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.candle_mode_cozy
 
 automation:
   - id: candle_mode_single_walk_start
@@ -147,6 +167,8 @@ script:
       - wait_template: "{{ is_state('light.REPLACE_SINGLE_TARGET', 'on') }}"
         timeout: "00:00:02"
         continue_on_timeout: true
+      - delay:
+          milliseconds: "{{ range(0, 180) | random }}"
       - repeat:
           while:
             - condition: state
@@ -156,21 +178,32 @@ script:
               entity_id: light.REPLACE_SINGLE_TARGET
               state: "on"
           sequence:
-            - variables:
-                current_brightness: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'brightness') | int(179) }}"
-                current_kelvin: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'color_temp_kelvin') | int(2350) }}"
+            - variables: &candle_vars_single
+                cozy_mode: "{{ is_state('input_boolean.candle_mode_cozy', 'on') }}"
+                min_brightness: "{{ 25 if cozy_mode else 153 }}"
+                max_brightness: "{{ 76 if cozy_mode else 204 }}"
+                flare_brightness: "{{ 89 if cozy_mode else 217 }}"
+                dip_brightness: "{{ 12 if cozy_mode else 140 }}"
+                min_kelvin: 2202
+                max_kelvin: "{{ 2302 if cozy_mode else 2502 }}"
+                current_brightness: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'brightness') | int(40 if cozy_mode else 179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'color_temp_kelvin') | int(2250 if cozy_mode else 2350) }}"
                 flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                dip_now: "{{ (range(1, 21) | random) == 1 }}"
                 next_brightness: >-
                   {% if flare_now %}
-                    217
+                    {{ flare_brightness }}
+                  {% elif dip_now %}
+                    {{ dip_brightness }}
                   {% else %}
-                    {{ [[current_brightness + (range(-18, 19) | random), 153] | max, 204] | min }}
+                    {{ [[current_brightness + (range(-18, 19) | random), min_brightness | int] | max, max_brightness | int] | min }}
                   {% endif %}
                 next_kelvin: >-
-                  {{ [[current_kelvin + (range(-60, 61) | random), 2202] | max, 2502] | min }}
+                  {{ [[current_kelvin + (range(-60, 61) | random), min_kelvin] | max, max_kelvin | int] | min }}
                 next_transition: "{{ [0.1, 0.14, 0.18, 0.24] | random }}"
                 next_delay_ms: "{{ range(100, 301) | random }}"
-            - action: light.turn_on
+            - continue_on_error: true
+              action: light.turn_on
               target:
                 entity_id: light.REPLACE_SINGLE_TARGET
               data:
@@ -187,6 +220,8 @@ script:
       - wait_template: "{{ is_state('light.REPLACE_SINGLE_TARGET', 'on') }}"
         timeout: "00:00:02"
         continue_on_timeout: true
+      - delay:
+          milliseconds: "{{ range(0, 250) | random }}"
       - repeat:
           while:
             - condition: state
@@ -196,21 +231,32 @@ script:
               entity_id: light.REPLACE_SINGLE_TARGET
               state: "on"
           sequence:
-            - variables:
-                current_brightness: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'brightness') | int(179) }}"
-                current_kelvin: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'color_temp_kelvin') | int(2360) }}"
+            - variables: &candle_vars_all_1
+                cozy_mode: "{{ is_state('input_boolean.candle_mode_cozy', 'on') }}"
+                min_brightness: "{{ 25 if cozy_mode else 153 }}"
+                max_brightness: "{{ 76 if cozy_mode else 204 }}"
+                flare_brightness: "{{ 89 if cozy_mode else 217 }}"
+                dip_brightness: "{{ 12 if cozy_mode else 140 }}"
+                min_kelvin: 2202
+                max_kelvin: "{{ 2302 if cozy_mode else 2502 }}"
+                current_brightness: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'brightness') | int(40 if cozy_mode else 179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'color_temp_kelvin') | int(2240 if cozy_mode else 2360) }}"
                 flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                dip_now: "{{ (range(1, 21) | random) == 1 }}"
                 next_brightness: >-
                   {% if flare_now %}
-                    217
+                    {{ flare_brightness }}
+                  {% elif dip_now %}
+                    {{ dip_brightness }}
                   {% else %}
-                    {{ [[current_brightness + (range(-16, 17) | random), 153] | max, 204] | min }}
+                    {{ [[current_brightness + (range(-16, 17) | random), min_brightness | int] | max, max_brightness | int] | min }}
                   {% endif %}
                 next_kelvin: >-
-                  {{ [[current_kelvin + (range(-55, 56) | random), 2202] | max, 2502] | min }}
+                  {{ [[current_kelvin + (range(-55, 56) | random), min_kelvin] | max, max_kelvin | int] | min }}
                 next_transition: "{{ [0.12, 0.16, 0.22, 0.28] | random }}"
                 next_delay_ms: "{{ range(100, 301) | random }}"
-            - action: light.turn_on
+            - continue_on_error: true
+              action: light.turn_on
               target:
                 entity_id: light.REPLACE_SINGLE_TARGET
               data:
@@ -227,6 +273,8 @@ script:
       - wait_template: "{{ is_state('light.REPLACE_LAMP_2', 'on') }}"
         timeout: "00:00:02"
         continue_on_timeout: true
+      - delay:
+          milliseconds: "{{ range(0, 250) | random }}"
       - repeat:
           while:
             - condition: state
@@ -237,20 +285,31 @@ script:
               state: "on"
           sequence:
             - variables:
-                current_brightness: "{{ state_attr('light.REPLACE_LAMP_2', 'brightness') | int(179) }}"
-                current_kelvin: "{{ state_attr('light.REPLACE_LAMP_2', 'color_temp_kelvin') | int(2360) }}"
+                cozy_mode: "{{ is_state('input_boolean.candle_mode_cozy', 'on') }}"
+                min_brightness: "{{ 25 if cozy_mode else 153 }}"
+                max_brightness: "{{ 76 if cozy_mode else 204 }}"
+                flare_brightness: "{{ 89 if cozy_mode else 217 }}"
+                dip_brightness: "{{ 12 if cozy_mode else 140 }}"
+                min_kelvin: 2202
+                max_kelvin: "{{ 2302 if cozy_mode else 2502 }}"
+                current_brightness: "{{ state_attr('light.REPLACE_LAMP_2', 'brightness') | int(40 if cozy_mode else 179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_LAMP_2', 'color_temp_kelvin') | int(2240 if cozy_mode else 2360) }}"
                 flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                dip_now: "{{ (range(1, 21) | random) == 1 }}"
                 next_brightness: >-
                   {% if flare_now %}
-                    217
+                    {{ flare_brightness }}
+                  {% elif dip_now %}
+                    {{ dip_brightness }}
                   {% else %}
-                    {{ [[current_brightness + (range(-16, 17) | random), 153] | max, 204] | min }}
+                    {{ [[current_brightness + (range(-16, 17) | random), min_brightness | int] | max, max_brightness | int] | min }}
                   {% endif %}
                 next_kelvin: >-
-                  {{ [[current_kelvin + (range(-55, 56) | random), 2202] | max, 2502] | min }}
+                  {{ [[current_kelvin + (range(-55, 56) | random), min_kelvin] | max, max_kelvin | int] | min }}
                 next_transition: "{{ [0.12, 0.16, 0.22, 0.28] | random }}"
                 next_delay_ms: "{{ range(100, 301) | random }}"
-            - action: light.turn_on
+            - continue_on_error: true
+              action: light.turn_on
               target:
                 entity_id: light.REPLACE_LAMP_2
               data:
@@ -267,6 +326,8 @@ script:
       - wait_template: "{{ is_state('light.REPLACE_LAMP_3', 'on') }}"
         timeout: "00:00:02"
         continue_on_timeout: true
+      - delay:
+          milliseconds: "{{ range(0, 250) | random }}"
       - repeat:
           while:
             - condition: state
@@ -277,20 +338,31 @@ script:
               state: "on"
           sequence:
             - variables:
-                current_brightness: "{{ state_attr('light.REPLACE_LAMP_3', 'brightness') | int(179) }}"
-                current_kelvin: "{{ state_attr('light.REPLACE_LAMP_3', 'color_temp_kelvin') | int(2360) }}"
+                cozy_mode: "{{ is_state('input_boolean.candle_mode_cozy', 'on') }}"
+                min_brightness: "{{ 25 if cozy_mode else 153 }}"
+                max_brightness: "{{ 76 if cozy_mode else 204 }}"
+                flare_brightness: "{{ 89 if cozy_mode else 217 }}"
+                dip_brightness: "{{ 12 if cozy_mode else 140 }}"
+                min_kelvin: 2202
+                max_kelvin: "{{ 2302 if cozy_mode else 2502 }}"
+                current_brightness: "{{ state_attr('light.REPLACE_LAMP_3', 'brightness') | int(40 if cozy_mode else 179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_LAMP_3', 'color_temp_kelvin') | int(2240 if cozy_mode else 2360) }}"
                 flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                dip_now: "{{ (range(1, 21) | random) == 1 }}"
                 next_brightness: >-
                   {% if flare_now %}
-                    217
+                    {{ flare_brightness }}
+                  {% elif dip_now %}
+                    {{ dip_brightness }}
                   {% else %}
-                    {{ [[current_brightness + (range(-16, 17) | random), 153] | max, 204] | min }}
+                    {{ [[current_brightness + (range(-16, 17) | random), min_brightness | int] | max, max_brightness | int] | min }}
                   {% endif %}
                 next_kelvin: >-
-                  {{ [[current_kelvin + (range(-55, 56) | random), 2202] | max, 2502] | min }}
+                  {{ [[current_kelvin + (range(-55, 56) | random), min_kelvin] | max, max_kelvin | int] | min }}
                 next_transition: "{{ [0.12, 0.16, 0.22, 0.28] | random }}"
                 next_delay_ms: "{{ range(100, 301) | random }}"
-            - action: light.turn_on
+            - continue_on_error: true
+              action: light.turn_on
               target:
                 entity_id: light.REPLACE_LAMP_3
               data:

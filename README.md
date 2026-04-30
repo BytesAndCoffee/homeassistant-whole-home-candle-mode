@@ -13,9 +13,10 @@ Files:
 This package gives you:
 - a single-lamp candle mode switch
 - a whole-home candle mode switch
+- a global cozy mode switch
 - bounded-random-walk flicker
 - independent per-lamp movement in whole-home mode
-- rare brightness flares for more believable flame behavior
+- rare brightness flares and dim falters for more believable flame behavior
 
 ## Inspired by
 
@@ -29,10 +30,11 @@ That post is a great simple starting point.
 
 Compared with the original single-automation approach, this package adds:
 - virtual mode switches
-- single-lamp and whole-home modes
+- single-lamp, whole-home, and cozy modes
 - bounded random walk instead of absolute random jumps
 - independent per-lamp motion in whole-home mode
-- a rare 85% brightness flare for more flame-like behavior
+- a rare bright flare and rare dim falter for more flame-like behavior
 - one runner per lamp, started in parallel, to reduce whole-room lag
+- resilience hardening for Matter timeouts and runner startup races
 
 So the original idea stays recognizable, but the implementation is tuned more like a reusable ambient-lighting system.

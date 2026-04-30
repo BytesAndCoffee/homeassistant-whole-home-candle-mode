@@ -2,24 +2,27 @@
 
 ## Main knobs
 
-You can tune five big things:
+You can tune six big things:
 
 1. brightness range
 2. color temperature range
 3. step size
 4. loop cadence
-5. flare chance
+5. flare/falter chance
+6. cozy-mode envelope
 
 ## Brightness clamp
 
-Current clamp is roughly:
+Current normal clamp is roughly:
 - **60% to 80%**
 - with a rare **85% flare**
+- and a rarer dim falter
 
 In the package this is represented by brightness values:
 - `153` minimum
 - `204` maximum
 - `217` flare
+- `140` falter
 
 Why those numbers:
 - Home Assistant brightness uses `0-255`
@@ -71,15 +74,28 @@ Good practical bands:
 Current flare chance:
 - **1 in 10**
 
-That is controlled by:
+Current falter chance:
+- **1 in 20**
+
+These are controlled by:
 
 ```jinja2
 (range(1, 11) | random) == 1
+(range(1, 21) | random) == 1
 ```
 
 Examples:
 - `range(1, 21)` = 1 in 20, rarer flare
 - `range(1, 6)` = 1 in 5, more frequent flare
+- `range(1, 40)` = 1 in 40, very rare falter
+
+## Cozy mode
+
+Cozy mode swaps the normal envelope for a much dimmer one:
+- brightness: **10% to 30%**
+- color temp: **2202K to 2302K**
+
+Because cozy mode is a separate global switch, you can toggle it while single or whole-home candle mode is already running.
 
 ## Per-lamp independence
 
