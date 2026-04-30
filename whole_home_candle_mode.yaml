@@ -1,0 +1,301 @@
+# Whole Home Candle Mode package
+#
+# Before using:
+# 1. Replace light.REPLACE_SINGLE_TARGET with your single-lamp candle target.
+# 2. Replace the sample lamps in the whole-home lists with your real entities.
+# 3. Duplicate/adapt per-lamp whole-home scripts if you have more lamps.
+# 4. Restart Home Assistant.
+#
+# This package creates:
+# - switch.candle_mode_single
+# - switch.candle_mode_all
+#
+# Behavior:
+# - bounded random walk, not absolute random jumps
+# - brightness clamp: 60% to 80%
+# - 1 in 10 chance of a brief 85% flare
+# - warm color range: 2202K to 2502K
+# - per-bulb update cadence: 100ms to 300ms
+# - one independent runner per lamp in whole-home mode
+
+input_boolean:
+  candle_mode_single:
+    name: Candle Mode Single
+    icon: mdi:candle
+  candle_mode_all:
+    name: Whole Home Candle Mode
+    icon: mdi:candelabra
+
+template:
+  - switch:
+      - name: Candle Mode Single
+        unique_id: candle_mode_single_switch
+        icon: mdi:candle
+        state: "{{ is_state('input_boolean.candle_mode_single', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.candle_mode_all
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.candle_mode_single
+          - action: light.turn_on
+            target:
+              entity_id: light.REPLACE_SINGLE_TARGET
+            data:
+              brightness_pct: 70
+              color_temp_kelvin: 2350
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.candle_mode_single
+          - action: light.turn_off
+            target:
+              entity_id: light.REPLACE_SINGLE_TARGET
+
+      - name: Whole Home Candle Mode
+        unique_id: candle_mode_all_switch
+        icon: mdi:candelabra
+        state: "{{ is_state('input_boolean.candle_mode_all', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.candle_mode_single
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.candle_mode_all
+          - action: light.turn_on
+            target:
+              entity_id:
+                - light.REPLACE_SINGLE_TARGET
+                - light.REPLACE_LAMP_2
+                - light.REPLACE_LAMP_3
+            data:
+              brightness_pct: 68
+              color_temp_kelvin: 2380
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.candle_mode_all
+          - action: light.turn_off
+            target:
+              entity_id:
+                - light.REPLACE_SINGLE_TARGET
+                - light.REPLACE_LAMP_2
+                - light.REPLACE_LAMP_3
+
+automation:
+  - id: candle_mode_single_walk_start
+    alias: Candle Mode Single
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_boolean.candle_mode_single
+        to: "on"
+      - platform: state
+        entity_id: light.REPLACE_SINGLE_TARGET
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.candle_mode_single
+        state: "on"
+    action:
+      - action: script.turn_on
+        target:
+          entity_id: script.candle_walk_single
+
+  - id: candle_mode_single_sync_off
+    alias: Candle Mode Single Sync Off
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: light.REPLACE_SINGLE_TARGET
+        to: "off"
+    condition:
+      - condition: state
+        entity_id: input_boolean.candle_mode_single
+        state: "on"
+    action:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.candle_mode_single
+
+  - id: candle_mode_all_start
+    alias: Whole Home Candle Mode Start
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_boolean.candle_mode_all
+        to: "on"
+    action:
+      - parallel:
+          - action: script.turn_on
+            target:
+              entity_id: script.candle_walk_lamp_1
+          - action: script.turn_on
+            target:
+              entity_id: script.candle_walk_lamp_2
+          - action: script.turn_on
+            target:
+              entity_id: script.candle_walk_lamp_3
+
+script:
+  candle_walk_single:
+    alias: Candle Walk Single
+    mode: restart
+    sequence:
+      - wait_template: "{{ is_state('light.REPLACE_SINGLE_TARGET', 'on') }}"
+        timeout: "00:00:02"
+        continue_on_timeout: true
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.candle_mode_single
+              state: "on"
+            - condition: state
+              entity_id: light.REPLACE_SINGLE_TARGET
+              state: "on"
+          sequence:
+            - variables:
+                current_brightness: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'brightness') | int(179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'color_temp_kelvin') | int(2350) }}"
+                flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                next_brightness: >-
+                  {% if flare_now %}
+                    217
+                  {% else %}
+                    {{ [[current_brightness + (range(-18, 19) | random), 153] | max, 204] | min }}
+                  {% endif %}
+                next_kelvin: >-
+                  {{ [[current_kelvin + (range(-60, 61) | random), 2202] | max, 2502] | min }}
+                next_transition: "{{ [0.1, 0.14, 0.18, 0.24] | random }}"
+                next_delay_ms: "{{ range(100, 301) | random }}"
+            - action: light.turn_on
+              target:
+                entity_id: light.REPLACE_SINGLE_TARGET
+              data:
+                brightness: "{{ next_brightness }}"
+                color_temp_kelvin: "{{ next_kelvin }}"
+                transition: "{{ next_transition }}"
+            - delay:
+                milliseconds: "{{ next_delay_ms }}"
+
+  candle_walk_lamp_1:
+    alias: Candle Walk Lamp 1
+    mode: restart
+    sequence:
+      - wait_template: "{{ is_state('light.REPLACE_SINGLE_TARGET', 'on') }}"
+        timeout: "00:00:02"
+        continue_on_timeout: true
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.candle_mode_all
+              state: "on"
+            - condition: state
+              entity_id: light.REPLACE_SINGLE_TARGET
+              state: "on"
+          sequence:
+            - variables:
+                current_brightness: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'brightness') | int(179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_SINGLE_TARGET', 'color_temp_kelvin') | int(2360) }}"
+                flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                next_brightness: >-
+                  {% if flare_now %}
+                    217
+                  {% else %}
+                    {{ [[current_brightness + (range(-16, 17) | random), 153] | max, 204] | min }}
+                  {% endif %}
+                next_kelvin: >-
+                  {{ [[current_kelvin + (range(-55, 56) | random), 2202] | max, 2502] | min }}
+                next_transition: "{{ [0.12, 0.16, 0.22, 0.28] | random }}"
+                next_delay_ms: "{{ range(100, 301) | random }}"
+            - action: light.turn_on
+              target:
+                entity_id: light.REPLACE_SINGLE_TARGET
+              data:
+                brightness: "{{ next_brightness }}"
+                color_temp_kelvin: "{{ next_kelvin }}"
+                transition: "{{ next_transition }}"
+            - delay:
+                milliseconds: "{{ next_delay_ms }}"
+
+  candle_walk_lamp_2:
+    alias: Candle Walk Lamp 2
+    mode: restart
+    sequence:
+      - wait_template: "{{ is_state('light.REPLACE_LAMP_2', 'on') }}"
+        timeout: "00:00:02"
+        continue_on_timeout: true
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.candle_mode_all
+              state: "on"
+            - condition: state
+              entity_id: light.REPLACE_LAMP_2
+              state: "on"
+          sequence:
+            - variables:
+                current_brightness: "{{ state_attr('light.REPLACE_LAMP_2', 'brightness') | int(179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_LAMP_2', 'color_temp_kelvin') | int(2360) }}"
+                flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                next_brightness: >-
+                  {% if flare_now %}
+                    217
+                  {% else %}
+                    {{ [[current_brightness + (range(-16, 17) | random), 153] | max, 204] | min }}
+                  {% endif %}
+                next_kelvin: >-
+                  {{ [[current_kelvin + (range(-55, 56) | random), 2202] | max, 2502] | min }}
+                next_transition: "{{ [0.12, 0.16, 0.22, 0.28] | random }}"
+                next_delay_ms: "{{ range(100, 301) | random }}"
+            - action: light.turn_on
+              target:
+                entity_id: light.REPLACE_LAMP_2
+              data:
+                brightness: "{{ next_brightness }}"
+                color_temp_kelvin: "{{ next_kelvin }}"
+                transition: "{{ next_transition }}"
+            - delay:
+                milliseconds: "{{ next_delay_ms }}"
+
+  candle_walk_lamp_3:
+    alias: Candle Walk Lamp 3
+    mode: restart
+    sequence:
+      - wait_template: "{{ is_state('light.REPLACE_LAMP_3', 'on') }}"
+        timeout: "00:00:02"
+        continue_on_timeout: true
+      - repeat:
+          while:
+            - condition: state
+              entity_id: input_boolean.candle_mode_all
+              state: "on"
+            - condition: state
+              entity_id: light.REPLACE_LAMP_3
+              state: "on"
+          sequence:
+            - variables:
+                current_brightness: "{{ state_attr('light.REPLACE_LAMP_3', 'brightness') | int(179) }}"
+                current_kelvin: "{{ state_attr('light.REPLACE_LAMP_3', 'color_temp_kelvin') | int(2360) }}"
+                flare_now: "{{ (range(1, 11) | random) == 1 }}"
+                next_brightness: >-
+                  {% if flare_now %}
+                    217
+                  {% else %}
+                    {{ [[current_brightness + (range(-16, 17) | random), 153] | max, 204] | min }}
+                  {% endif %}
+                next_kelvin: >-
+                  {{ [[current_kelvin + (range(-55, 56) | random), 2202] | max, 2502] | min }}
+                next_transition: "{{ [0.12, 0.16, 0.22, 0.28] | random }}"
+                next_delay_ms: "{{ range(100, 301) | random }}"
+            - action: light.turn_on
+              target:
+                entity_id: light.REPLACE_LAMP_3
+              data:
+                brightness: "{{ next_brightness }}"
+                color_temp_kelvin: "{{ next_kelvin }}"
+                transition: "{{ next_transition }}"
+            - delay:
+                milliseconds: "{{ next_delay_ms }}"
