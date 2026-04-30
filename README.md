@@ -7,6 +7,8 @@ Files:
 - `OVERVIEW.md` - what it is and how it behaves
 - `SETUP.md` - install instructions
 - `CUSTOMIZING.md` - tuning guide
+- `ARCHITECTURE.md` - GitHub-friendly architecture notes
+- `ARCHITECTURE.typ` - Typst source version of the architecture notes
 
 This package gives you:
 - a single-lamp candle mode switch
